@@ -60,6 +60,7 @@
     <div id="right-controls">
       <button id="runBtn">▶️ Run</button>
       <button id="clearBtn">🧹 Clear</button>
+      <button id="shareBtn">📤 Share</button>
     </div>
   </div>
 
@@ -75,6 +76,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       const runBtn = document.getElementById('runBtn');
       const clearBtn = document.getElementById('clearBtn');
+      const shareBtn = document.getElementById('shareBtn');
       const consoleDiv = document.getElementById('console');
 
       let editor;
@@ -82,8 +84,20 @@
       require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.45.0/min/vs' } });
 
       require(['vs/editor/editor.main'], function () {
+        // Load code from URL param if exists
+        const params = new URLSearchParams(window.location.search);
+        let initialCode = `console.log('Hello world');`;
+
+        if (params.has('code')) {
+          try {
+            initialCode = decodeURIComponent(escape(atob(params.get('code'))));
+          } catch (e) {
+            console.warn('Invalid code param');
+          }
+        }
+
         editor = monaco.editor.create(document.getElementById('editor'), {
-          value: `console.log('Hello world');`,
+          value: initialCode,
           language: 'javascript',
           theme: 'vs-dark',
           automaticLayout: true,
@@ -91,6 +105,14 @@
 
         runBtn.addEventListener('click', () => runCode());
         clearBtn.addEventListener('click', () => consoleDiv.innerHTML = '');
+        shareBtn.addEventListener('click', () => {
+          const code = editor.getValue();
+          const encoded = btoa(unescape(encodeURIComponent(code)));
+          const url = `${location.origin}${location.pathname}?code=${encoded}`;
+          navigator.clipboard.writeText(url).then(() => {
+            alert('🔗 Shareable link copied to clipboard!');
+          });
+        });
       });
 
       function runCode() {
@@ -103,17 +125,18 @@
             if (typeof arg === 'object' && arg !== null) {
               try {
                 if (Array.isArray(arg)) {
-                  return JSON.stringify(arg); // array en una línea
+                  return JSON.stringify(arg); // array in one line
                 }
-                return JSON.stringify(arg, null, 2); // objeto multilínea
+                return JSON.stringify(arg, null, 2); // object pretty
               } catch {
                 return '[Circular]';
               }
             }
             return String(arg);
           }).join(' ');
-        
+
           consoleDiv.innerHTML += line + '\n';
+          consoleDiv.scrollTop = consoleDiv.scrollHeight;
           originalLog.apply(console, args);
         };
 
@@ -126,7 +149,7 @@
         console.log = originalLog;
       }
 
-      // Detección de cambio de pestaña o foco
+      // Visibility detection
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
           consoleDiv.innerHTML += '[!] User switched tab or minimized window\n';
