@@ -118,37 +118,39 @@
       function runCode() {
         const code = editor.getValue();
         consoleDiv.innerHTML = '';
-
+      
+        // ✅ Actualizar URL con código actual
+        const encoded = btoa(unescape(encodeURIComponent(code)));
+        const newUrl = `${location.origin}${location.pathname}?code=${encoded}`;
+        history.replaceState(null, '', newUrl);
+      
         const originalLog = console.log;
         console.log = function (...args) {
           const line = args.map((arg) => {
             if (typeof arg === 'object' && arg !== null) {
               try {
-                if (Array.isArray(arg)) {
-                  return JSON.stringify(arg); // array in one line
-                }
-                return JSON.stringify(arg, null, 2); // object pretty
+                if (Array.isArray(arg)) return JSON.stringify(arg);
+                return JSON.stringify(arg, null, 2);
               } catch {
                 return '[Circular]';
               }
             }
             return String(arg);
           }).join(' ');
-
+      
           consoleDiv.innerHTML += line + '\n';
           consoleDiv.scrollTop = consoleDiv.scrollHeight;
           originalLog.apply(console, args);
         };
-
+      
         try {
           new Function(code)();
         } catch (err) {
           consoleDiv.innerHTML += '⚠️ Error: ' + err.message + '\n';
         }
-
+      
         console.log = originalLog;
       }
-
       // Visibility detection
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
@@ -162,7 +164,7 @@
     });
   </script>
   <footer style="text-align: center; padding: 8px; font-size: 0.85em; background: #f0f0f0;">
-    Author: Kevin Matamoros S.
+    Author: Kevin Matamoros
   </footer>
 </body>
 </html>
