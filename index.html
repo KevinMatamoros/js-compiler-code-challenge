@@ -78,55 +78,63 @@
       const clearBtn = document.getElementById('clearBtn');
       const shareBtn = document.getElementById('shareBtn');
       const consoleDiv = document.getElementById('console');
-
+  
       let editor;
-
-      require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.45.0/min/vs' } });
-
-      require(['vs/editor/editor.main'], function () {
-        // Load code from URL param if exists
-        const params = new URLSearchParams(window.location.search);
-        let initialCode = `console.log('Hello world');`;
-
-        if (params.has('code')) {
-          try {
-            initialCode = decodeURIComponent(escape(atob(params.get('code'))));
-          } catch (e) {
-            console.warn('Invalid code param');
-          }
+  
+      // ✅ Decodificación segura
+      function decodeBase64Unicode(base64) {
+        try {
+          return decodeURIComponent(atob(base64));
+        } catch (e) {
+          console.warn('Invalid code in URL');
+          return `console.log('Hello world');`;
         }
-
+      }
+  
+      // ✅ Obtener el código desde la URL (si existe)
+      const params = new URLSearchParams(window.location.search);
+      let initialCode = `console.log('Hello world');`;
+  
+      if (params.has('code')) {
+        initialCode = decodeBase64Unicode(params.get('code'));
+      }
+  
+      // Cargar Monaco Editor
+      require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.45.0/min/vs' } });
+  
+      require(['vs/editor/editor.main'], function () {
         editor = monaco.editor.create(document.getElementById('editor'), {
           value: initialCode,
           language: 'javascript',
           theme: 'vs-dark',
           automaticLayout: true,
         });
-
+  
         runBtn.addEventListener('click', () => runCode());
         clearBtn.addEventListener('click', () => consoleDiv.innerHTML = '');
+  
         shareBtn.addEventListener('click', () => {
           const code = editor.getValue();
-          const encoded = btoa(unescape(encodeURIComponent(code)));
+          const encoded = btoa(encodeURIComponent(code));
           const url = `${location.origin}${location.pathname}?code=${encoded}`;
           navigator.clipboard.writeText(url).then(() => {
             alert('🔗 Shareable link copied to clipboard!');
           });
         });
       });
-
+  
       function runCode() {
         const code = editor.getValue();
         consoleDiv.innerHTML = '';
-      
-        // ✅ Actualizar URL con código actual
-        const encoded = btoa(unescape(encodeURIComponent(code)));
+  
+        // ✅ Actualizar la URL sin recargar
+        const encoded = btoa(encodeURIComponent(code));
         const newUrl = `${location.origin}${location.pathname}?code=${encoded}`;
         history.replaceState(null, '', newUrl);
-      
+  
         const originalLog = console.log;
         console.log = function (...args) {
-          const line = args.map((arg) => {
+          const line = args.map(arg => {
             if (typeof arg === 'object' && arg !== null) {
               try {
                 if (Array.isArray(arg)) return JSON.stringify(arg);
@@ -137,27 +145,28 @@
             }
             return String(arg);
           }).join(' ');
-      
+  
           consoleDiv.innerHTML += line + '\n';
           consoleDiv.scrollTop = consoleDiv.scrollHeight;
           originalLog.apply(console, args);
         };
-      
+  
         try {
           new Function(code)();
         } catch (err) {
           consoleDiv.innerHTML += '⚠️ Error: ' + err.message + '\n';
         }
-      
+  
         console.log = originalLog;
       }
-      // Visibility detection
+  
+      // 🧠 Detección de cambio de pestaña o pérdida de foco
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
           consoleDiv.innerHTML += '[!] User switched tab or minimized window\n';
         }
       });
-
+  
       window.addEventListener('blur', () => {
         consoleDiv.innerHTML += '[!] User lost window focus\n';
       });
