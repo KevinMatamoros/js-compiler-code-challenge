@@ -2,44 +2,71 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>JS Compiler</title>
+  <title>JS Code Compiler</title>
   <style>
-    body { margin: 0; font-family: sans-serif; }
-    #editor { height: 60vh; width: 100%; }
-    #console {
-      height: 30vh;
-      overflow-y: auto;
-      background: #111;
-      color: #0f0;
-      padding: 10px;
-      font-family: monospace;
-      white-space: pre-wrap;
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
     }
+
     #controls {
       padding: 10px;
       background: #eee;
       display: flex;
       justify-content: space-between;
     }
+
+    #workspace {
+      flex: 1;
+      display: flex;
+      height: 100%;
+    }
+
+    #editor, #console {
+      flex: 1;
+      height: 100%;
+    }
+
+    #editor {
+      border-right: 1px solid #ccc;
+    }
+
+    #console {
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      overflow-y: auto;
+    }
+
     #left-controls, #right-controls {
       display: flex;
       gap: 10px;
     }
-    button { padding: 6px 10px; cursor: pointer; }
+
+    button {
+      padding: 6px 10px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <div id="controls">
-    <div id="left-controls">
-      <strong>JS Compiler</strong>
-    </div>
+    <div id="left-controls"><strong>JS Code Compiler</strong></div>
     <div id="right-controls">
       <button id="runBtn">▶️ Run</button>
       <button id="clearBtn">🧹 Clear</button>
     </div>
   </div>
-  <div id="editor"></div>
-  <div id="console"></div>
+
+  <div id="workspace">
+    <div id="editor"></div>
+    <div id="console"></div>
+  </div>
 
   <!-- Monaco Editor -->
   <script src="https://unpkg.com/monaco-editor@0.45.0/min/vs/loader.js"></script>
@@ -68,16 +95,24 @@
 
       function runCode() {
         const code = editor.getValue();
-        const originalLog = console.log;
+        consoleDiv.innerHTML = '';
 
+        const originalLog = console.log;
         console.log = function (...args) {
-          const line = args.map(a => {
-            try {
-              return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a);
-            } catch {
-              return '[Circular]';
+          const line = args.map((arg) => {
+            if (typeof arg === 'object' && arg !== null) {
+              try {
+                if (Array.isArray(arg)) {
+                  return JSON.stringify(arg); // array en una línea
+                }
+                return JSON.stringify(arg, null, 2); // objeto multilínea
+              } catch {
+                return '[Circular]';
+              }
             }
+            return String(arg);
           }).join(' ');
+        
           consoleDiv.innerHTML += line + '\n';
           originalLog.apply(console, args);
         };
@@ -91,7 +126,7 @@
         console.log = originalLog;
       }
 
-      // Detección de cambio de tab o ventana
+      // Detección de cambio de pestaña o foco
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
           consoleDiv.innerHTML += '[!] User switched tab or minimized window\n';
