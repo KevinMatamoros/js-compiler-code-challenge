@@ -61,6 +61,104 @@
       cursor: pointer;
     }
 
+    #warningCount {
+      align-self: center;
+      font-size: 0.9em;
+      color: #555;
+    }
+
+    #warningCount.danger {
+      color: #c00;
+      font-weight: bold;
+    }
+
+    #terminatedModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    #terminatedModal.open {
+      display: flex;
+    }
+
+    #terminatedModal .modal-box {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 640px;
+      max-height: 100%;
+      overflow-y: auto;
+      background: #fff;
+      padding: 48px 40px;
+      border-radius: 16px;
+      text-align: center;
+      color: #334155;
+      line-height: 1.6;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.3);
+      outline: none;
+    }
+
+    #terminatedModal .modal-icon {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      background: #fef3c7;
+      color: #b45309;
+      font-size: 36px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #terminatedModal h2 {
+      margin: 0 0 16px;
+      font-size: 1.75em;
+      color: #0f172a;
+    }
+
+    #terminatedModal p {
+      margin: 0 0 12px;
+      font-size: 1.05em;
+    }
+
+    #terminatedModal .modal-summary {
+      margin: 24px 0;
+      padding: 16px 20px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 0.95em;
+      text-align: left;
+    }
+
+    #terminatedModal .modal-summary strong {
+      color: #0f172a;
+    }
+
+    #terminatedModal .modal-next {
+      margin-bottom: 0;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    @media (max-width: 480px) {
+      #terminatedModal .modal-box {
+        padding: 32px 20px;
+      }
+
+      #terminatedModal h2 {
+        font-size: 1.4em;
+      }
+    }
+
     footer {
       text-align: center;
       padding: 8px;
@@ -73,6 +171,7 @@
   <div id="controls">
     <div id="left-controls"><strong>JS Code Compiler</strong></div>
     <div id="right-controls">
+      <span id="warningCount">Warnings: 0/5</span>
       <button id="runBtn">▶️ Run</button>
       <button id="clearBtn">🧹 Clear</button>
       <button id="shareBtn">📤 Share</button>
@@ -83,6 +182,20 @@
     <div id="editor"></div>
     <div id="resizer"></div>
     <div id="console"></div>
+  </div>
+
+  <div id="terminatedModal" role="alertdialog" aria-modal="true" aria-labelledby="terminatedTitle" aria-describedby="terminatedDesc">
+    <div class="modal-box" tabindex="-1">
+      <div class="modal-icon" aria-hidden="true">!</div>
+      <h2 id="terminatedTitle">Your interview session has ended</h2>
+      <p id="terminatedDesc">We noticed you left the interview window 5 times, so this session was stopped automatically.</p>
+      <div class="modal-summary">
+        <strong>Why did this happen?</strong><br />
+        To keep the challenge fair for every candidate, the window needs to stay active. Switching tabs, minimizing the browser, or using another application counts as leaving the window.
+      </div>
+      <p>Your code has been kept as it was, but it can no longer be edited or run.</p>
+      <p class="modal-next">Please reach out to your interviewer to discuss the next steps.</p>
+    </div>
   </div>
 
   <!-- Monaco Editor -->
@@ -122,6 +235,8 @@
           automaticLayout: true,
         });
 
+        if (terminated) lockSession();
+
         runBtn.addEventListener('click', () => runCode());
         clearBtn.addEventListener('click', () => consoleDiv.innerHTML = '');
         shareBtn.addEventListener('click', () => {
@@ -129,12 +244,15 @@
           const encoded = btoa(encodeURIComponent(code));
           const url = `${location.origin}${location.pathname}?code=${encoded}`;
           navigator.clipboard.writeText(url).then(() => {
+            ignoreBlur = true;
             alert('🔗 Shareable link copied to clipboard!');
+            ignoreBlur = false;
           });
         });
       });
 
       function runCode() {
+        if (terminated) return;
         const code = editor.getValue();
         consoleDiv.innerHTML = '';
 
@@ -203,15 +321,80 @@
       });
 
       // 🧠 Visibility detection
+      const MAX_WARNINGS = 5;
+      const warningCountEl = document.getElementById('warningCount');
+      const terminatedModal = document.getElementById('terminatedModal');
+
+      // Persisted per tab so a page reload doesn't reset the count
+      let warnings = Number(sessionStorage.getItem('interviewWarnings')) || 0;
+      let terminated = sessionStorage.getItem('interviewTerminated') === 'true';
+      let isAway = false;
+      let ignoreBlur = false;
+
+      function updateWarningCount() {
+        warningCountEl.textContent = `Warnings: ${warnings}/${MAX_WARNINGS}`;
+        warningCountEl.classList.toggle('danger', warnings >= MAX_WARNINGS - 1);
+      }
+
+      function lockSession() {
+        terminatedModal.classList.add('open');
+        terminatedModal.querySelector('.modal-box').focus();
+        runBtn.disabled = true;
+        shareBtn.disabled = true;
+        if (editor) editor.updateOptions({ readOnly: true });
+      }
+
+      // Switching tabs fires both "blur" and "visibilitychange"; count each departure once
+      function registerLeave(message) {
+        if (terminated || isAway) return;
+        isAway = true;
+        warnings++;
+        sessionStorage.setItem('interviewWarnings', warnings);
+        updateWarningCount();
+        consoleDiv.innerHTML += `[!] Warning ${warnings}/${MAX_WARNINGS}: ${message}\n`;
+
+        if (warnings >= MAX_WARNINGS) {
+          terminated = true;
+          sessionStorage.setItem('interviewTerminated', 'true');
+          consoleDiv.innerHTML += '[x] Interview terminated: too many window focus warnings\n';
+          lockSession();
+        }
+      }
+
+      function registerReturn() {
+        isAway = false;
+      }
+
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-          consoleDiv.innerHTML += '[!] User switched tab or minimized window\n';
+          registerLeave('User switched tab or minimized window');
+        } else {
+          registerReturn();
         }
       });
 
       window.addEventListener('blur', () => {
-        consoleDiv.innerHTML += '[!] User lost window focus\n';
+        if (ignoreBlur) return;
+        registerLeave('User lost window focus');
       });
+
+      window.addEventListener('focus', registerReturn);
+
+      // The modal can't be dismissed: swallow keyboard input while it's open
+      document.addEventListener('keydown', (e) => {
+        if (!terminated) return;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+
+      document.addEventListener('focusin', (e) => {
+        if (terminated && !terminatedModal.contains(e.target)) {
+          terminatedModal.querySelector('.modal-box').focus();
+        }
+      });
+
+      updateWarningCount();
+      if (terminated) lockSession();
     });
   </script>
 
